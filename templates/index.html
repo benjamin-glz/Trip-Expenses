@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+  <link rel="stylesheet" href="/static/style.css">
+  <title>Trip Expenses</title>
+  <script src="/static/main.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+
+</head>
+
+<body x-data="app()" x-init="init()">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">✈ Trip<span>Expenses</span></div>
+      <div class="sidebar-subtitle">Suivi de voyages</div>
+    </div>
+
+    <div class="trip-list">
+      <template x-for="trip in trips" :key="trip.id">
+        <div
+          class="trip-item"
+          :class="{ active: activeId === trip.id && !compareId }"
+          @click="selectTrip(trip.id)"
+        >
+          <div class="trip-item-info">
+            <div class="trip-item-name" x-text="trip.name"></div>
+            <div class="trip-item-budget" x-text="trip.daily_budget + ' €/jour'"></div>
+          </div>
+          <button class="trip-item-del" title="Supprimer" @click.stop="deleteTrip(trip.id)">×</button>
+        </div>
+      </template>
+
+      <div x-show="trips.length === 0" style="padding: 20px 8px; color: var(--muted); font-size: 12px; text-align:center; line-height: 1.6;">
+        Aucun voyage.<br/>Ajoutez-en un ci-dessous.
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <button class="btn-add-trip" @click="showModal = true">
+        <span>＋</span> Nouveau voyage
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── Main content ─────────────────────────────────────────────────────── -->
+  <main class="main" id="main-scroll">
+
+    <!-- Empty state -->
+    <div class="empty-state" x-show="!activeId">
+      <div class="empty-icon">🗺️</div>
+      <h2>Sélectionnez un voyage</h2>
+      <p>Choisissez un voyage dans la barre latérale ou créez-en un nouveau pour visualiser vos dépenses.</p>
+    </div>
+
+    <!-- Trip dashboard -->
+    <template x-if="activeId && analytics">
+      <div>
+        <!-- Header -->
+        <div class="trip-header">
+          <div class="kpi-row">
+            <div :style="compareId ? 'color:var(--accent)' : ''">
+              <div class="trip-title" x-text="analytics.trip.name"></div>
+              <div style="font-size:12px;margin-top:6px;" x-text="analytics.summary.num_days + ' jours · Budget ' + analytics.trip.daily_budget + ' €/jour'"></div>
+            </div>
+            <div x-if="compareId && compareAnalytics" :style="compareId ? 'color:var(--accent2)' : ''">
+              <div class="trip-title" x-text="compareAnalytics.trip.name"></div>
+              <div style="font-size:12px;margin-top:6px;" x-text="compareAnalytics.summary.num_days + ' jours · Budget ' + compareAnalytics.trip.daily_budget + ' €/jour'"></div>
+            </div>
+          </div>
+
+          <div class="kpi-row">
+            <div class="kpi" :style="compareId ? 'display:flex;flex-direction:column;align-items:flex-start;' : ''">
+              <div class="kpi-label">
+                Total dépensé
+              </div>
+              <div style="display:flex;align-items:baseline;gap:10px;">
+                <div class="kpi-value" :style="compareId ? 'color:var(--accent)' : ''" x-text="fmt(analytics.summary.total) + ' €'"></div>
+                <template x-if="compareId && compareAnalytics">
+                  <span style="color:var(--muted);font-size:13px;">vs</span>
+                </template>
+                <template x-if="compareId && compareAnalytics">
+                  <div class="kpi-value" style="color:var(--accent2);" x-text="fmt(compareAnalytics.summary.total) + ' €'"></div>
+                </template>
+              </div>
+            </div>
+
+            <div class="kpi" :style="compareId ? 'display:flex;flex-direction:column;align-items:flex-start;' : ''">
+              <div class="kpi-label">Moy. quotidienne</div>
+              <div style="display:flex;align-items:baseline;gap:10px;">
+                <div
+                  class="kpi-value"
+                  :class="analytics.summary.avg_daily > analytics.summary.planned_daily ? 'danger' : 'success'"
+                  x-text="fmt(analytics.summary.avg_daily) + ' / ' + fmt(analytics.summary.planned_daily) + ' €'"
+                ></div>
+                <template x-if="compareId && compareAnalytics">
+                    <span style="color:var(--muted);font-size:13px;">vs</span>
+                </template>
+                <div
+                  class="kpi-value"
+                  x-if="compareId && compareAnalytics"
+                  :class="compareAnalytics.summary.avg_daily > compareAnalytics.summary.planned_daily ? 'danger' : 'success'"
+                  x-text="fmt(compareAnalytics.summary.avg_daily) + ' / ' + fmt(compareAnalytics.summary.planned_daily) + ' €'"
+                ></div>
+              </div>
+            </div>
+
+            <div class="kpi" :style="compareId ? 'display:flex;flex-direction:column;align-items:flex-start;' : ''">
+              <div class="kpi-label">Jours dépassés</div>
+              <div style="display:flex;align-items:baseline;gap:10px;">
+              <div
+                class="kpi-value"
+                :class="analytics.summary.over_budget_days > 0 ? 'danger' : 'success'"
+                x-text="analytics.summary.over_budget_days"
+              ></div>
+              <template x-if="compareId && compareAnalytics">
+                  <span style="color:var(--muted);font-size:13px;">vs</span>
+              </template>
+              <div
+                class="kpi-value"
+                :class="compareAnalytics.summary.over_budget_days > 0 ? 'danger' : 'success'"
+                x-text="compareAnalytics.summary.over_budget_days"
+              ></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Compare bar -->
+        <div class="compare-bar" x-show="trips.length > 1">
+          <span class="compare-label">🔀 Comparer avec :</span>
+          <select class="compare-select" x-model="compareSelectId">
+            <option value="">— Choisir un voyage —</option>
+            <template x-for="t in trips.filter(t => t.id !== activeId)" :key="t.id">
+              <option :value="t.id" x-text="t.name"></option>
+            </template>
+          </select>
+          <button class="btn-compare" @click="startCompare()" :disabled="!compareSelectId">Comparer</button>
+          <button class="btn-clear-compare" x-show="compareId" @click="clearCompare()">✕ Effacer</button>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+
+          <!-- Daily budget chart -->
+          <div class="chart-card wide">
+            <div class="chart-title">
+              Budget quotidien — Réel vs Prévu
+              <template x-if="compareId">
+                <span>
+                  &nbsp;
+                  <span class="compare-badge badge-a" x-text="analytics.trip.name"></span>
+                  <span style="color:var(--muted);margin:0 4px;">vs</span>
+                  <span class="compare-badge badge-b" x-text="compareAnalytics && compareAnalytics.trip.name"></span>
+                </span>
+              </template>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="dailyChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Category percentage pie -->
+          <template x-if="!compareId">
+            <div class="chart-card">
+              <div class="chart-title">
+                Répartition par catégorie en %
+              </div>
+              <div class="chart-wrap">
+                <canvas id="catPerChart"></canvas>
+              </div>
+            </div>
+          </template>
+
+          <!-- Category sum pie -->
+          <template x-if="!compareId">
+            <div class="chart-card">
+              <div class="chart-title">
+                Répartition par catégorie en €
+              </div>
+              <div class="chart-wrap">
+                <canvas id="catSumChart"></canvas>
+              </div>
+            </div>
+          </template>
+
+          <!-- Average expense chart -->
+          <div class="chart-card wide">
+            <div class="chart-title">
+              Dépense moyenne par catégorie
+              <template x-if="compareId">
+                <span>
+                  &nbsp;
+                  <span class="compare-badge badge-a" x-text="analytics.trip.name"></span>
+                  <span style="color:var(--muted);margin:0 4px;">vs</span>
+                  <span class="compare-badge badge-b" x-text="compareAnalytics && compareAnalytics.trip.name"></span>
+                </span>
+              </template>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="averageChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Percentage expense chart -->
+          <template x-if="compareId">
+            <div class="chart-card wide">
+              <div class="chart-title">
+                Dépense par catégorie en pourcentage
+                  <span>
+                    &nbsp;
+                    <span class="compare-badge badge-a" x-text="analytics.trip.name"></span>
+                    <span style="color:var(--muted);margin:0 4px;">vs</span>
+                    <span class="compare-badge badge-b" x-text="compareAnalytics && compareAnalytics.trip.name"></span>
+                  </span>
+              </div>
+              <div class="chart-wrap">
+                <canvas id="percentageChart"></canvas>
+              </div>
+            </div>
+          </template>
+
+        </div>
+      </div>
+    </template>
+
+  </main>
+
+  <!-- ── Add trip modal ────────────────────────────────────────────────────── -->
+  <div class="overlay" x-show="showModal" x-transition.opacity @click.self="showModal = false">
+    <div class="modal" @click.stop>
+      <div class="modal-title">Nouveau voyage</div>
+
+      <div class="form-group">
+        <label class="form-label">Nom du voyage</label>
+        <input class="form-input" type="text" placeholder="Ex: Road trip Islande" x-model="form.name" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Budget quotidien (€)</label>
+        <input class="form-input" type="number" placeholder="100" min="1" x-model="form.daily_budget" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Fichier CSV (séparateur ;)</label>
+        <input class="form-input" type="file" accept=".csv" @change="form.file = $event.target.files[0]" />
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" @click="showModal = false">Annuler</button>
+        <button
+          class="btn-primary"
+          @click="createTrip()"
+          :disabled="uploading || !form.name || !form.daily_budget || !form.file"
+        >
+          <template x-if="uploading"><span class="spinner"></span></template>
+          <template x-if="!uploading"><span>Importer</span></template>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Toast ─────────────────────────────────────────────────────────────── -->
+  <div class="toast" :class="toast.type" x-show="toast.visible" x-text="toast.msg" x-transition></div>
+
+</body>
+</html>
